@@ -1,11 +1,24 @@
 package com.codingengines.json.object;
 
+import com.codingengines.json.exception.JSONParseMalformedObjectException;
+import com.codingengines.json.io.JSONInput;
+import com.codingengines.json.io.JSONOutput;
+
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
 /**
  * Created by Andrew on 2/18/2018.
  */
+@SuppressWarnings("Duplicates")
 public class JSONFactory {
 
 	/*
+	cited from https://tools.ietf.org/html/rfc7159
+
 2.  JSON Grammar
 
    A JSON text is a sequence of tokens.  The set of tokens includes six
@@ -241,20 +254,229 @@ public class JSONFactory {
 		return new JSONArray();
 	}
 
-	public static JSONArray createJSONArray(String json) {
-		//TODO parse string into json array
-
-		return new JSONArray();
-	}
-
 	public static JSONObject createJSONObject() {
 		return new JSONObject();
 	}
 
-	public static JSONObject createJSONObject(String json) {
-		//TODO parse string into json object
-
-		return new JSONObject();
+	public static JSONElement<?> createJSONElement(String jsonText) {
+		return _parseJSONText(jsonText);
 	}
+
+	private static JSONElement<?> _parseJSONText(String jsonText) {
+		int fistObj = jsonText.indexOf(_OBJ_START);
+		int firstArr = jsonText.indexOf(_ARR_START);
+
+		int i;
+
+		JSONElement<?> currentElement = new JSONObject();
+		Object state = _STATE_OBJECT;
+
+		if (fistObj == -1 && firstArr == -1) {
+			return currentElement;
+		}
+		else if (fistObj == -1) {
+			i = firstArr;
+
+			currentElement = new JSONArray();
+
+			state = _STATE_ARRAY;
+		}
+		else if (firstArr == -1) {
+			i = fistObj;
+		}
+		else {
+			if (firstArr < fistObj) {
+				i = firstArr;
+
+				currentElement = new JSONArray();
+
+				state = _STATE_ARRAY;
+			}
+			else {
+				i = fistObj;
+			}
+		}
+
+		// first element already created;
+
+		i++;
+
+		Supplier<JSONElement<?>> jsonElementSupplier = JSONObject::new;
+
+		int stringStart = -1;
+		int stringEnd = -1;
+
+		String key = null;
+		int intKey = 0;
+
+		for (; i < jsonText.length();) {
+			char c = jsonText.charAt(i);
+
+			switch (c) {
+				case _ESCAPE:
+				// skip this and next character
+
+				i+=2;
+
+				break;
+
+				case _OBJ_START:
+					jsonElementSupplier = JSONObject::new;
+					state = _STATE_OBJECT;
+
+				case _ARR_START:
+					if (jsonElementSupplier == null) {
+						jsonElementSupplier = JSONArray::new;
+						state = _STATE_ARRAY;
+					}
+
+					JSONElement<?> childElement = jsonElementSupplier.get();
+
+					if (state == _STATE_ARRAY) {
+						currentElement.put(key, (JSONArray)childElement);
+					}
+					else {
+						currentElement.put(key, (JSONObject)childElement);
+					}
+
+					currentElement = childElement;
+
+					jsonElementSupplier = null;
+
+					i++;
+
+					break;
+
+				case _ARR_END:
+					intKey = 0;
+				case _OBJ_END:
+
+					if (currentElement.parent != null) {
+						// root element
+
+						currentElement = currentElement.parent;
+					}
+
+					if (currentElement instanceof JSONObject) {
+						state = _STATE_OBJECT;
+					}
+					else {
+						state = _STATE_ARRAY;
+					}
+
+					i++;
+
+					break;
+
+				case _NAME_SEP:
+					// fetch string key out of jsonText
+
+					key = jsonText.substring(stringStart, stringEnd);
+
+					stringStart = -1;
+					stringEnd = -1;
+
+					i++;
+
+					break;
+
+				case _QUOTE:
+					if (stringStart == -1) {
+						stringStart = i + 1;
+					}
+					else if (stringEnd == -1) {
+						stringEnd = i;
+					}
+
+					if (stringStart != -1 && stringEnd != -1 && key != null) {
+						// encountered string value?
+
+						currentElement.put(
+							key,
+							jsonText.substring(stringStart, stringEnd));
+
+						key = null;
+
+						stringStart = -1;
+						stringEnd = -1;
+					}
+
+					i++;
+
+					break;
+
+				case _VALUE_SEP:
+					if (state == _STATE_OBJECT) {
+						// reset string key for new name
+
+						key = null;
+					}
+					else {
+						// increment intKey
+						key = String.valueOf(intKey++);
+					}
+
+				default:
+
+					i++;
+			}
+		}
+
+		/*
+
+		{"obj":{
+				"obj" : {
+					"obj" : {
+						"levels":"deep"
+					}
+				},
+				"hello": "world",
+				"good" : "day"
+			},
+			"arr" :
+				[
+					"foo",
+					"bar"
+				]
+			"name" : "value"
+		}
+
+		[
+			{
+				"hello": "world",
+				"good" : "day"
+			},
+			[
+				"foo",
+				"bar"
+			],
+			"value"
+		]
+		*/
+		return currentElement;
+	}
+
+	private static final Object _STATE_ARRAY = new Object();
+	private static final Object _STATE_OBJECT = new Object();
+
+	private static final Object _STATE_FALSE = new Object();
+	private static final Object _STATE_TRUE = new Object();
+	private static final Object _STATE_NULL = new Object();
+
+
+	private static final char _ARR_START = '[';
+	private static final char _ARR_END = ']';
+	private static final char _OBJ_START = '{';
+	private static final char _OBJ_END = '}';
+
+	private static final char _NAME_SEP = ':';
+	private static final char _VALUE_SEP = ',';
+	private static final char _QUOTE = '"';
+
+	private static final char _ESCAPE = '\\';
+
+	private static final String _FALSE_LIT = "false";
+	private static final String _TRUE_LIT = "true";
+	private static final String _NULL_LIT= "null";
 
 }

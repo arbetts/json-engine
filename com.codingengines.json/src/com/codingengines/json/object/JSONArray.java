@@ -1,5 +1,6 @@
 package com.codingengines.json.object;
 
+import com.codingengines.json.exception.ChildElementNotSupportedException;
 import com.codingengines.json.function.KeyConverter;
 import com.codingengines.json.io.JSONReadable;
 import com.codingengines.json.io.JSONWritable;
@@ -9,6 +10,28 @@ import com.codingengines.json.io.JSONWritable;
  */
 public class JSONArray extends JSONElement<Integer>
 	implements JSONValue<JSONArray> {
+
+	public static final JSONArray EMPTY_JSON_ARRAY = new JSONArray() {
+
+		protected JSONValue<?> getChild(String key) {
+			throw new ChildElementNotSupportedException();
+		}
+
+		protected JSONValue<?> getChildByIndex(int index) {
+			throw new ChildElementNotSupportedException();
+		}
+
+		protected <V> void putChild(String key, JSONValue<V> value) {
+			throw new ChildElementNotSupportedException();
+		}
+
+		protected <V> void putChildByIndex(
+			int index, String key, JSONValue<V> value) {
+
+			throw new ChildElementNotSupportedException();
+		}
+
+	};
 
 	@Override
 	public KeyConverter<Integer> getKeyConverter() {

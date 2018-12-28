@@ -1,8 +1,5 @@
 package com.codingengines.com.json;
 
-import com.codingengines.json.io.JSONInput;
-import com.codingengines.json.io.JSONOutput;
-import com.codingengines.json.io.JSONReadable;
 import com.codingengines.json.io.JSONWritable;
 import com.codingengines.json.object.JSONFactory;
 import com.codingengines.json.object.JSONArray;
@@ -14,7 +11,7 @@ import org.junit.Test;
 /**
  * Created by Andrew on 2/17/2018.
  */
-public class JSONTest {
+public class JSONElementTest {
 
 	@Test
 	public void testObject() throws Exception {
@@ -29,6 +26,7 @@ public class JSONTest {
 		jsonArray.put(true);
 		jsonArray.put(5);
 		jsonArray.put("a");
+		jsonArray.put((String)null);
 
 		JSONObject childJSONObject = JSONFactory.createJSONObject();
 
@@ -91,26 +89,6 @@ public class JSONTest {
 		jsonObject.put("obj", jsonWritable);
 
 		System.out.println(jsonObject.toJSON());
-	}
-
-	private static class TestWritable implements JSONWritable {
-
-		@Override
-		public void write(JSONOutput jsonOutput) {
-			jsonOutput.put("foo", foo);
-		}
-
-		private String foo = "bar";
-	}
-
-	private static class TestReadable implements JSONReadable {
-
-		@Override
-		public void read(JSONInput jsonInput) {
-			foo = jsonInput.get("foo", "world");
-		}
-
-		private String foo;
 	}
 
 }

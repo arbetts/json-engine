@@ -2,6 +2,8 @@ package com.codingengines.json.object;
 
 /**
  * Created by Andrew on 2/18/2018.
+ *
+ * also handles null
  */
 public final class JSONString extends BaseJSONPrimitive<String> {
 
@@ -9,13 +11,27 @@ public final class JSONString extends BaseJSONPrimitive<String> {
 		super(s, parent);
 	}
 
+	public String toJSON() {
+		if (p == null) {
+			return "null";
+		}
+
+		return super.toJSON();
+	}
+
 	protected void toJSON(StringBuilder sb) {
+		if (p == null) {
+			sb.append("null");
+
+			return;
+		}
+
 		char c;
-		int len = _p.length();
+		int len = p.length();
 		String hexString;
 
 		for (int i = 0; i < len; i += 1) {
-			c = _p.charAt(i);
+			c = p.charAt(i);
 
 			switch (c) {
 				case '\\':
@@ -67,11 +83,19 @@ public final class JSONString extends BaseJSONPrimitive<String> {
 
 	@Override
 	protected Character openChar() {
+		if (p == null) {
+			return null;
+		}
+
 		return '\"';
 	}
 
 	@Override
 	protected Character closeChar() {
+		if (p == null) {
+			return null;
+		}
+
 		return '\"';
 	}
 

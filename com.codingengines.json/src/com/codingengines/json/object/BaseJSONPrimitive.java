@@ -12,7 +12,7 @@ class BaseJSONPrimitive<P> extends JSONElement<String> implements JSONValue<P> {
 	BaseJSONPrimitive(P p, JSONElement<?> parent) {
 		super(parent);
 
-		_p = p;
+		this.p = p;
 	}
 
 	@Override
@@ -27,15 +27,15 @@ class BaseJSONPrimitive<P> extends JSONElement<String> implements JSONValue<P> {
 
 	@Override
 	public P get() {
-		return _p;
+		return p;
 	}
 
 	public String toJSON() {
-		return _p.toString();
+		return p.toString();
 	}
 
 	protected void toJSON(StringBuilder sb) {
-		sb.append(_p);
+		sb.append(p);
 	}
 
 	@Override
@@ -61,6 +61,6 @@ class BaseJSONPrimitive<P> extends JSONElement<String> implements JSONValue<P> {
 		throw new ChildElementNotSupportedException();
 	}
 
-	protected P _p;
+	protected P p;
 
 }

@@ -18,11 +18,11 @@ public abstract class JSONElement<K> implements
 	Iterable<JSONPair<K, ?>>, JSONInput<K>, JSONOutput<K> {
 
 	JSONElement() {
-		_children = new ArrayList<>();
+		children = new ArrayList<>();
 	}
 
 	JSONElement(JSONElement<?> parent) {
-		_parent = parent;
+		this.parent = parent;
 	}
 
 	public Boolean get(K key, Boolean defaultValue) {
@@ -77,7 +77,7 @@ public abstract class JSONElement<K> implements
 
 	public Iterator<JSONPair<K, ?>> iterator() {
 		ListIterator<JSONPair<K, ?>> pairListIterator =
-			_children.listIterator();
+			children.listIterator();
 
 		while (pairListIterator.hasNext()) {
 			pairListIterator.next();
@@ -126,7 +126,7 @@ public abstract class JSONElement<K> implements
 	}
 
 	public int size() {
-		return _children.size();
+		return children.size();
 	}
 
 	public String toJSON() {
@@ -160,36 +160,36 @@ public abstract class JSONElement<K> implements
 	}
 
 	protected JSONValue<?> getChildByIndex(int index) {
-		JSONPair<K, ?> pair = _children.get(index);
+		JSONPair<K, ?> pair = children.get(index);
 
 		return pair.value();
 	}
 
 	protected <V> void putChild(K key, JSONValue<V> value) {
-		_children.add(new JSONPairImpl<>(getKey(key), value));
+		children.add(new JSONPairImpl<>(getKey(key), value));
 	}
 
 	protected <V> void putChildByIndex(int index, K key, JSONValue<V> value) {
-		while (_children.size() <= index) {
-			_children.add(null);
+		while (children.size() <= index) {
+			children.add(null);
 		}
 
-		_children.set(index, new JSONPairImpl<>(getKey(key), value));
+		children.set(index, new JSONPairImpl<>(getKey(key), value));
 	}
 
 	protected void setParent(JSONElement<?> parent) {
-		_parent = parent;
+		this.parent = parent;
 	}
 
 	protected void toJSON(StringBuilder sb) {
 		Character open = openChar();
 
-		if (open != null && _parent == null) {
+		if (open != null && parent == null) {
 			sb.append(open);
 		}
 
-		for (int i = 0; i < _children.size(); i++) {
-			JSONPair<K, ?> pair = _children.get(i);
+		for (int i = 0; i < children.size(); i++) {
+			JSONPair<K, ?> pair = children.get(i);
 
 			if (pair == null) {
 				continue;
@@ -222,14 +222,14 @@ public abstract class JSONElement<K> implements
 				sb.append(value.get());
 			}
 
-			if (i < _children.size() - 1) {
+			if (i < children.size() - 1) {
 				sb.append(',');
 			}
 		}
 
 		Character close = closeChar();
 
-		if (close != null && _parent == null) {
+		if (close != null && parent == null) {
 			sb.append(close);
 		}
 	}
@@ -259,7 +259,7 @@ public abstract class JSONElement<K> implements
 	}
 
 	private void _checkParent(JSONElement<?> element) {
-		JSONElement<?> parent = this._parent;
+		JSONElement<?> parent = this.parent;
 
 		while (parent != null) {
 			if (parent == element) {
@@ -268,7 +268,7 @@ public abstract class JSONElement<K> implements
 		}
 	}
 
-	private List<JSONPair<K, ?>> _children;
-	private JSONElement<?> _parent;
+	List<JSONPair<K, ?>> children;
+	JSONElement<?> parent;
 
 }
