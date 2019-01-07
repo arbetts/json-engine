@@ -177,7 +177,7 @@ public abstract class JSONElement<K> implements
 		children.set(index, new JSONPairImpl<>(getKey(key), value));
 	}
 
-	protected void setParent(JSONElement<?> parent) {
+	void setParent(JSONElement<?> parent) {
 		this.parent = parent;
 	}
 
@@ -265,6 +265,8 @@ public abstract class JSONElement<K> implements
 			if (parent == element) {
 				throw new CircularDependencyException();
 			}
+
+			parent = parent.parent;
 		}
 	}
 

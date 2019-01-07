@@ -1,14 +1,10 @@
 package com.codingengines.json.object;
 
 import com.codingengines.json.exception.JSONParseMalformedObjectException;
-import com.codingengines.json.io.JSONInput;
-import com.codingengines.json.io.JSONOutput;
 
 import java.util.Deque;
 import java.util.LinkedList;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.Objects;
 
 /**
  * Created by Andrew on 2/18/2018.
@@ -262,218 +258,409 @@ public class JSONFactory {
 		return _parseJSONText(jsonText);
 	}
 
-	private static JSONElement<?> _parseJSONText(String jsonText) {
-		int fistObj = jsonText.indexOf(_OBJ_START);
-		int firstArr = jsonText.indexOf(_ARR_START);
+	private static JSONElement<?> _assemble(
+		Deque<ElementTokenInstance> tokenInstances,
+		Deque<JSONElement<?>> elements, String jsonText) {
 
-		int i;
+		JSONElement<?> element = elements.pollFirst();
 
-		JSONElement<?> currentElement = new JSONObject();
-		Object state = _STATE_OBJECT;
+		if (!ElementToken.isPair(
+			tokenInstances.pollFirst(), tokenInstances.pollLast())) {
 
-		if (fistObj == -1 && firstArr == -1) {
-			return currentElement;
+			throw new JSONParseMalformedObjectException();
 		}
-		else if (fistObj == -1) {
-			i = firstArr;
 
-			currentElement = new JSONArray();
+		String objectKey = _EMPTY_KEY;
 
-			state = _STATE_ARRAY;
-		}
-		else if (firstArr == -1) {
-			i = fistObj;
-		}
-		else {
-			if (firstArr < fistObj) {
-				i = firstArr;
+		while (!tokenInstances.isEmpty()) {
+			ElementTokenInstance current = tokenInstances.pollFirst();
 
-				currentElement = new JSONArray();
+			if (current instanceof ArrayEndTokenInstance ||
+				current instanceof ObjectEndTokenInstance) {
 
-				state = _STATE_ARRAY;
+				if (element.parent != null) {
+					element = element.parent;
+				}
+
+				continue;
 			}
-			else {
-				i = fistObj;
+
+			if (element instanceof JSONObject) {
+				JSONObject jsonObject = (JSONObject)element;
+
+				if (current instanceof QuoteTokenInstance) {
+
+					// key
+
+					ElementTokenInstance endQuote = tokenInstances.pollFirst();
+					ElementTokenInstance nameSeparator =
+						tokenInstances.pollFirst();
+
+					if (!(endQuote instanceof QuoteTokenInstance ||
+						nameSeparator instanceof NameSeperatorTokenInstance)) {
+
+						throw new JSONParseMalformedObjectException();
+					}
+
+					objectKey = jsonText.substring(
+						current.index + 1, endQuote.index);
+
+					ElementTokenInstance nextInstance = tokenInstances.peek();
+
+					if (nextInstance instanceof QuoteTokenInstance) {
+
+						// string value
+
+						nextInstance = tokenInstances.pollFirst();
+						endQuote = tokenInstances.pollFirst();
+
+						if (!(endQuote instanceof QuoteTokenInstance)) {
+							throw new JSONParseMalformedObjectException();
+						}
+
+						jsonObject.put(
+							objectKey,
+							jsonText.substring(
+								nextInstance.index + 1, endQuote.index));
+
+						objectKey = _EMPTY_KEY;
+					}
+					else if (nextInstance instanceof ObjectEndTokenInstance ||
+						nextInstance instanceof ValueSeperatorTokenInstance) {
+
+						// literal value
+
+						String value = jsonText.substring(
+							nameSeparator.index + 1, nextInstance.index).trim();
+
+						switch (value) {
+							case _FALSE_LIT:
+								jsonObject.put(objectKey, false);
+
+								break;
+							case _TRUE_LIT:
+								jsonObject.put(objectKey, true);
+
+								break;
+							case _NULL_LIT:
+								jsonObject.put(objectKey, (String) null);
+
+								break;
+							default:
+								try {
+									jsonObject.put(
+										objectKey, Double.parseDouble(value));
+								}
+								catch (NumberFormatException nfe) {
+									jsonObject.put(objectKey, value);
+								}
+
+								break;
+						}
+
+						objectKey = _EMPTY_KEY;
+					}
+				}
+				else if (current instanceof ArrayStartTokenInstance) {
+					// array value
+
+					element = elements.pollFirst();
+
+					jsonObject.put(objectKey, (JSONArray)element);
+
+					objectKey = _EMPTY_KEY;
+				}
+				else if (current instanceof ObjectStartTokenInstance) {
+					// object value
+
+					element = elements.pollFirst();
+
+					jsonObject.put(objectKey, (JSONObject)element);
+
+					objectKey = _EMPTY_KEY;
+				}
+			}
+			else if (element instanceof JSONArray) {
+				JSONArray jsonArray = (JSONArray)element;
+
+				if (current instanceof QuoteTokenInstance) {
+					ElementTokenInstance endQuote = tokenInstances.pollFirst();
+
+					if (!(endQuote instanceof QuoteTokenInstance)) {
+						throw new JSONParseMalformedObjectException();
+					}
+
+					jsonArray.put(
+						jsonText.substring(current.index + 1, endQuote.index));
+				}
+				else if (current instanceof ArrayStartTokenInstance) {
+					// array value
+
+					element = elements.pollFirst();
+
+					jsonArray.put((JSONArray)element);
+
+					ElementTokenInstance nextInstance = tokenInstances.peek();
+
+					if (nextInstance instanceof ArrayEndTokenInstance ||
+						nextInstance instanceof ValueSeperatorTokenInstance) {
+
+						// check for first literal or number single element array
+
+						String value = jsonText.substring(
+							current.index + 1, nextInstance.index).trim();
+
+						if (!value.isEmpty()) {
+							tokenInstances.push(
+								new ValueSeperatorTokenInstance(current.index));
+						}
+					}
+				}
+				else if (current instanceof ObjectStartTokenInstance) {
+					// object value
+
+					element = elements.pollFirst();
+
+					jsonArray.put((JSONObject)element);
+				}
+				else if (current instanceof ValueSeperatorTokenInstance) {
+					ElementTokenInstance nextInstance = tokenInstances.peek();
+
+					if (nextInstance instanceof ArrayEndTokenInstance ||
+						nextInstance instanceof ValueSeperatorTokenInstance) {
+
+						String value = jsonText.substring(
+							current.index + 1, nextInstance.index).trim();
+
+						// literal value
+
+						switch (value) {
+							case _FALSE_LIT:
+								jsonArray.put(false);
+
+								break;
+							case _TRUE_LIT:
+								jsonArray.put(true);
+
+								break;
+							case _NULL_LIT:
+								jsonArray.put((String) null);
+
+								break;
+							default:
+								try {
+									jsonArray.put(Double.parseDouble(value));
+								}
+								catch (NumberFormatException nfe) {
+									jsonArray.put(value);
+								}
+
+								break;
+						}
+					}
+				}
 			}
 		}
 
-		// first element already created;
-
-		i++;
-
-		Supplier<JSONElement<?>> jsonElementSupplier = JSONObject::new;
-
-		int stringStart = -1;
-		int stringEnd = -1;
-
-		String key = null;
-		int intKey = 0;
-
-		for (; i < jsonText.length();) {
-			char c = jsonText.charAt(i);
-
-			switch (c) {
-				case _ESCAPE:
-				// skip this and next character
-
-				i+=2;
-
-				break;
-
-				case _OBJ_START:
-					jsonElementSupplier = JSONObject::new;
-					state = _STATE_OBJECT;
-
-				case _ARR_START:
-					if (jsonElementSupplier == null) {
-						jsonElementSupplier = JSONArray::new;
-						state = _STATE_ARRAY;
-					}
-
-					JSONElement<?> childElement = jsonElementSupplier.get();
-
-					if (state == _STATE_ARRAY) {
-						currentElement.put(key, (JSONArray)childElement);
-					}
-					else {
-						currentElement.put(key, (JSONObject)childElement);
-					}
-
-					currentElement = childElement;
-
-					jsonElementSupplier = null;
-
-					i++;
-
-					break;
-
-				case _ARR_END:
-					intKey = 0;
-				case _OBJ_END:
-
-					if (currentElement.parent != null) {
-						// root element
-
-						currentElement = currentElement.parent;
-					}
-
-					if (currentElement instanceof JSONObject) {
-						state = _STATE_OBJECT;
-					}
-					else {
-						state = _STATE_ARRAY;
-					}
-
-					i++;
-
-					break;
-
-				case _NAME_SEP:
-					// fetch string key out of jsonText
-
-					key = jsonText.substring(stringStart, stringEnd);
-
-					stringStart = -1;
-					stringEnd = -1;
-
-					i++;
-
-					break;
-
-				case _QUOTE:
-					if (stringStart == -1) {
-						stringStart = i + 1;
-					}
-					else if (stringEnd == -1) {
-						stringEnd = i;
-					}
-
-					if (stringStart != -1 && stringEnd != -1 && key != null) {
-						// encountered string value?
-
-						currentElement.put(
-							key,
-							jsonText.substring(stringStart, stringEnd));
-
-						key = null;
-
-						stringStart = -1;
-						stringEnd = -1;
-					}
-
-					i++;
-
-					break;
-
-				case _VALUE_SEP:
-					if (state == _STATE_OBJECT) {
-						// reset string key for new name
-
-						key = null;
-					}
-					else {
-						// increment intKey
-						key = String.valueOf(intKey++);
-					}
-
-				default:
-
-					i++;
-			}
-		}
-
-		/*
-
-		{"obj":{
-				"obj" : {
-					"obj" : {
-						"levels":"deep"
-					}
-				},
-				"hello": "world",
-				"good" : "day"
-			},
-			"arr" :
-				[
-					"foo",
-					"bar"
-				]
-			"name" : "value"
-		}
-
-		[
-			{
-				"hello": "world",
-				"good" : "day"
-			},
-			[
-				"foo",
-				"bar"
-			],
-			"value"
-		]
-		*/
-		return currentElement;
+		return element;
 	}
 
-	private static final Object _STATE_ARRAY = new Object();
-	private static final Object _STATE_OBJECT = new Object();
+	private static JSONElement<?> _parseJSONText(String jsonText) {
+		LinkedList<ElementTokenInstance> tokenInstances = new LinkedList<>();
+		Deque<JSONElement<?>> elements = new LinkedList<>();
 
-	private static final Object _STATE_FALSE = new Object();
-	private static final Object _STATE_TRUE = new Object();
-	private static final Object _STATE_NULL = new Object();
+		for (int i = 0; i < jsonText.length(); i++) {
+			ElementTokenInstance tokenInstance = ElementToken.getTokenInstance(
+				jsonText.charAt(i), i);
 
+			if ((tokenInstance == null) ||
+				(i > 0 && jsonText.charAt(i - 1) == '\\')) {
 
-	private static final char _ARR_START = '[';
-	private static final char _ARR_END = ']';
-	private static final char _OBJ_START = '{';
-	private static final char _OBJ_END = '}';
+				continue;
+			}
 
-	private static final char _NAME_SEP = ':';
-	private static final char _VALUE_SEP = ',';
-	private static final char _QUOTE = '"';
+			if (tokenInstance instanceof ArrayStartTokenInstance) {
+				elements.add(new JSONArray());
+			}
+			else if (tokenInstance instanceof ObjectStartTokenInstance) {
+				elements.add(new JSONObject());
+			}
 
-	private static final char _ESCAPE = '\\';
+			tokenInstances.add(tokenInstance);
+		}
+
+		if (tokenInstances.isEmpty() ||
+			!(tokenInstances.peek() instanceof ArrayStartTokenInstance ||
+				tokenInstances.peek() instanceof ObjectStartTokenInstance)) {
+
+			throw new JSONParseMalformedObjectException();
+		}
+
+		System.out.println("elements = " + elements);
+
+		return _assemble(tokenInstances, elements, jsonText);
+	}
+
+	private static class ElementTokenInstance {
+
+		ElementTokenInstance(
+			ElementToken elementToken, int index) {
+			this.elementToken = elementToken;
+			this.index = index;
+		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (object == this) {
+				return true;
+			}
+
+			if (!(object instanceof ElementTokenInstance)) {
+				return false;
+			}
+
+			ElementTokenInstance eti = (ElementTokenInstance)object;
+
+			return Objects.equals(elementToken, eti.elementToken);
+		}
+
+		@Override
+		public int hashCode() {
+			if (elementToken == null) {
+				return 0;
+			}
+
+			return elementToken.hashCode();
+		}
+
+		@Override
+		public String toString() {
+			return elementToken + " @ " + index;
+		}
+
+		ElementToken elementToken;
+		int index;
+	}
+
+	private static class ArrayStartTokenInstance extends ElementTokenInstance {
+
+		ArrayStartTokenInstance(int index) {
+			super(ElementToken.ARR_START, index);
+		}
+
+	}
+
+	private static class ArrayEndTokenInstance extends ElementTokenInstance {
+
+		ArrayEndTokenInstance(int index) {
+			super(ElementToken.ARR_END, index);
+		}
+
+	}
+
+	private static class ObjectStartTokenInstance extends ElementTokenInstance {
+
+		ObjectStartTokenInstance(int index) {
+			super(ElementToken.OBJ_START, index);
+		}
+	}
+
+	private static class ObjectEndTokenInstance extends ElementTokenInstance {
+
+		ObjectEndTokenInstance(int index) {
+			super(ElementToken.OBJ_END, index);
+		}
+
+	}
+
+	private static class NameSeperatorTokenInstance
+		extends ElementTokenInstance {
+
+		NameSeperatorTokenInstance(int index) {
+			super(ElementToken.NAME_SEP, index);
+		}
+
+	}
+
+	private static class ValueSeperatorTokenInstance
+		extends ElementTokenInstance {
+
+		ValueSeperatorTokenInstance(int index) {
+			super(ElementToken.VALUE_SEP, index);
+		}
+
+	}
+
+	private static class QuoteTokenInstance extends ElementTokenInstance {
+
+		QuoteTokenInstance(int index) {
+			super(ElementToken.QUOTE, index);
+		}
+
+	}
+
+	private enum ElementToken {
+		ARR_START,
+		ARR_END,
+		OBJ_START,
+		OBJ_END,
+		NAME_SEP,
+		VALUE_SEP,
+		QUOTE;
+
+		public static boolean isPair(
+			ElementTokenInstance elementTokenInstance1,
+			ElementTokenInstance elementTokenInstance2) {
+
+			return isPair(
+				elementTokenInstance1.elementToken,
+				elementTokenInstance2.elementToken);
+		}
+
+		public static boolean isPair(
+			ElementToken elementToken1, ElementToken elementToken2) {
+
+			switch (elementToken1) {
+				case ARR_END:
+					return ARR_START.equals(elementToken2);
+				case OBJ_END:
+					return OBJ_START.equals(elementToken2);
+				case ARR_START:
+					return ARR_END.equals(elementToken2);
+				case OBJ_START:
+					return OBJ_END.equals(elementToken2);
+				case NAME_SEP:
+				case VALUE_SEP:
+				case QUOTE:
+				default:
+					return false;
+			}
+		}
+
+		public static ElementTokenInstance getTokenInstance(char c, int i) {
+			switch (c) {
+				case '[':
+					return new ArrayStartTokenInstance(i);
+				case ']':
+					return new ArrayEndTokenInstance(i);
+				case '{':
+					return new ObjectStartTokenInstance(i);
+				case '}':
+					return new ObjectEndTokenInstance(i);
+				case ':':
+					return new NameSeperatorTokenInstance(i);
+				case ',':
+					return new ValueSeperatorTokenInstance(i);
+				case '"':
+					return new QuoteTokenInstance(i);
+				default:
+					return null;
+			}
+		}
+
+	}
+
+	private static final String _EMPTY_KEY = "empty_key";
 
 	private static final String _FALSE_LIT = "false";
 	private static final String _TRUE_LIT = "true";
