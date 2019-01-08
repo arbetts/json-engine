@@ -27,36 +27,46 @@ public final class JSONString extends BaseJSONPrimitive<String> {
 		}
 
 		char c;
+		char r;
 		int len = p.length();
 		String hexString;
 
-		for (int i = 0; i < len; i += 1) {
+		for (int i = 0; i < len; i++) {
 			c = p.charAt(i);
 
 			switch (c) {
-				case '\\':
-				case '/':
 				case '"':
-					sb.append('\\');
-					sb.append(c);
-					break;
-
 				case '\b':
-					sb.append("\\b");
-					break;
 				case '\t':
-					sb.append("\\t");
-					break;
 				case '\n':
-					sb.append("\\n");
-					break;
 				case '\f':
-					sb.append("\\f");
-					break;
 				case '\r':
-					sb.append("\\r");
+					r = getReplaceChar(c);
+
+					if ((i > 0) && (p.charAt(i - 1) != '\\')) {
+						sb.append('\\');
+						sb.append(r);
+					}
+					else {
+						sb.append(c);
+					}
+
 					break;
 
+				case '\\':
+					if (c == len -1) {
+						r = c;
+
+						int count = 0;
+
+						while (r == '\\') {
+							r = p.charAt(i - ++count);
+						}
+
+						if (count % 2 != 0) {
+							sb.append('\\');
+						}
+					}
 				default:
 					if (c < ' ') {
 						hexString = Integer.toHexString(c);
@@ -99,4 +109,20 @@ public final class JSONString extends BaseJSONPrimitive<String> {
 		return '\"';
 	}
 
+	private char getReplaceChar(char c) {
+		switch (c) {
+			case '\b':
+				return 'b';
+			case '\t':
+				return 't';
+			case '\n':
+				return 'n';
+			case '\f':
+				return 'f';
+			case '\r':
+				return 'r';
+			default:
+				return c;
+		}
+	}
 }

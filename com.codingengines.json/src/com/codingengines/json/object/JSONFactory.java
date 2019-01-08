@@ -255,7 +255,37 @@ public class JSONFactory {
 	}
 
 	public static JSONElement<?> createJSONElement(String jsonText) {
-		return _parseJSONText(jsonText);
+		LinkedList<ElementTokenInstance> tokenInstances = new LinkedList<>();
+		Deque<JSONElement<?>> elements = new LinkedList<>();
+
+		for (int i = 0; i < jsonText.length(); i++) {
+			ElementTokenInstance tokenInstance = ElementToken.getTokenInstance(
+				jsonText.charAt(i), i);
+
+			if ((tokenInstance == null) ||
+				(i > 0 && jsonText.charAt(i - 1) == '\\')) {
+
+				continue;
+			}
+
+			if (tokenInstance.elementToken == ElementToken.ARR_START) {
+				elements.add(new JSONArray());
+			}
+			else if (tokenInstance.elementToken == ElementToken.OBJ_START) {
+				elements.add(new JSONObject());
+			}
+
+			tokenInstances.add(tokenInstance);
+		}
+
+		if (tokenInstances.isEmpty() ||
+			!(tokenInstances.peek().elementToken == ElementToken.ARR_START ||
+				tokenInstances.peek().elementToken == ElementToken.OBJ_START)) {
+
+			throw new JSONParseMalformedObjectException();
+		}
+
+		return _assemble(tokenInstances, elements, jsonText);
 	}
 
 	private static JSONElement<?> _assemble(
@@ -275,8 +305,8 @@ public class JSONFactory {
 		while (!tokenInstances.isEmpty()) {
 			ElementTokenInstance current = tokenInstances.pollFirst();
 
-			if (current instanceof ArrayEndTokenInstance ||
-				current instanceof ObjectEndTokenInstance) {
+			if (current.elementToken == ElementToken.ARR_END ||
+				current.elementToken == ElementToken.OBJ_END) {
 
 				if (element.parent != null) {
 					element = element.parent;
@@ -288,7 +318,7 @@ public class JSONFactory {
 			if (element instanceof JSONObject) {
 				JSONObject jsonObject = (JSONObject)element;
 
-				if (current instanceof QuoteTokenInstance) {
+				if (current.elementToken == ElementToken.QUOTE) {
 
 					// key
 
@@ -296,8 +326,8 @@ public class JSONFactory {
 					ElementTokenInstance nameSeparator =
 						tokenInstances.pollFirst();
 
-					if (!(endQuote instanceof QuoteTokenInstance ||
-						nameSeparator instanceof NameSeperatorTokenInstance)) {
+					if ((endQuote.elementToken != ElementToken.QUOTE) ||
+						(nameSeparator.elementToken != ElementToken.NAME_SEP)) {
 
 						throw new JSONParseMalformedObjectException();
 					}
@@ -307,14 +337,15 @@ public class JSONFactory {
 
 					ElementTokenInstance nextInstance = tokenInstances.peek();
 
-					if (nextInstance instanceof QuoteTokenInstance) {
+					if ((nextInstance != null) &&
+						(nextInstance.elementToken == ElementToken.QUOTE)) {
 
 						// string value
 
 						nextInstance = tokenInstances.pollFirst();
 						endQuote = tokenInstances.pollFirst();
 
-						if (!(endQuote instanceof QuoteTokenInstance)) {
+						if (endQuote.elementToken != ElementToken.QUOTE) {
 							throw new JSONParseMalformedObjectException();
 						}
 
@@ -325,8 +356,9 @@ public class JSONFactory {
 
 						objectKey = _EMPTY_KEY;
 					}
-					else if (nextInstance instanceof ObjectEndTokenInstance ||
-						nextInstance instanceof ValueSeperatorTokenInstance) {
+					else if (nextInstance != null &&
+						(nextInstance.elementToken == ElementToken.OBJ_END||
+						nextInstance.elementToken == ElementToken.VALUE_SEP)) {
 
 						// literal value
 
@@ -349,7 +381,7 @@ public class JSONFactory {
 							default:
 								try {
 									jsonObject.put(
-										objectKey, Double.parseDouble(value));
+										objectKey, getNumberValue(value));
 								}
 								catch (NumberFormatException nfe) {
 									jsonObject.put(objectKey, value);
@@ -361,7 +393,7 @@ public class JSONFactory {
 						objectKey = _EMPTY_KEY;
 					}
 				}
-				else if (current instanceof ArrayStartTokenInstance) {
+				else if (current.elementToken == ElementToken.ARR_START) {
 					// array value
 
 					element = elements.pollFirst();
@@ -370,7 +402,7 @@ public class JSONFactory {
 
 					objectKey = _EMPTY_KEY;
 				}
-				else if (current instanceof ObjectStartTokenInstance) {
+				else if (current.elementToken == ElementToken.OBJ_START) {
 					// object value
 
 					element = elements.pollFirst();
@@ -383,17 +415,17 @@ public class JSONFactory {
 			else if (element instanceof JSONArray) {
 				JSONArray jsonArray = (JSONArray)element;
 
-				if (current instanceof QuoteTokenInstance) {
+				if (current.elementToken == ElementToken.QUOTE) {
 					ElementTokenInstance endQuote = tokenInstances.pollFirst();
 
-					if (!(endQuote instanceof QuoteTokenInstance)) {
+					if (endQuote.elementToken != ElementToken.QUOTE) {
 						throw new JSONParseMalformedObjectException();
 					}
 
 					jsonArray.put(
 						jsonText.substring(current.index + 1, endQuote.index));
 				}
-				else if (current instanceof ArrayStartTokenInstance) {
+				else if (current.elementToken == ElementToken.ARR_START) {
 					// array value
 
 					element = elements.pollFirst();
@@ -402,8 +434,10 @@ public class JSONFactory {
 
 					ElementTokenInstance nextInstance = tokenInstances.peek();
 
-					if (nextInstance instanceof ArrayEndTokenInstance ||
-						nextInstance instanceof ValueSeperatorTokenInstance) {
+					if ((nextInstance != null) &&
+						((nextInstance.elementToken == ElementToken.ARR_END) ||
+							(nextInstance.elementToken ==
+								ElementToken.VALUE_SEP))) {
 
 						// check for first literal or number single element array
 
@@ -412,22 +446,25 @@ public class JSONFactory {
 
 						if (!value.isEmpty()) {
 							tokenInstances.push(
-								new ValueSeperatorTokenInstance(current.index));
+								new ElementTokenInstance(
+									ElementToken.VALUE_SEP, current.index));
 						}
 					}
 				}
-				else if (current instanceof ObjectStartTokenInstance) {
+				else if (current.elementToken == ElementToken.OBJ_START) {
 					// object value
 
 					element = elements.pollFirst();
 
 					jsonArray.put((JSONObject)element);
 				}
-				else if (current instanceof ValueSeperatorTokenInstance) {
+				else if (current.elementToken == ElementToken.VALUE_SEP) {
 					ElementTokenInstance nextInstance = tokenInstances.peek();
 
-					if (nextInstance instanceof ArrayEndTokenInstance ||
-						nextInstance instanceof ValueSeperatorTokenInstance) {
+					if ((nextInstance != null) &&
+						((nextInstance.elementToken == ElementToken.ARR_END) ||
+							(nextInstance.elementToken ==
+								ElementToken.VALUE_SEP))) {
 
 						String value = jsonText.substring(
 							current.index + 1, nextInstance.index).trim();
@@ -449,7 +486,7 @@ public class JSONFactory {
 								break;
 							default:
 								try {
-									jsonArray.put(Double.parseDouble(value));
+									jsonArray.put(getNumberValue(value));
 								}
 								catch (NumberFormatException nfe) {
 									jsonArray.put(value);
@@ -465,46 +502,15 @@ public class JSONFactory {
 		return element;
 	}
 
-	private static JSONElement<?> _parseJSONText(String jsonText) {
-		LinkedList<ElementTokenInstance> tokenInstances = new LinkedList<>();
-		Deque<JSONElement<?>> elements = new LinkedList<>();
-
-		for (int i = 0; i < jsonText.length(); i++) {
-			ElementTokenInstance tokenInstance = ElementToken.getTokenInstance(
-				jsonText.charAt(i), i);
-
-			if ((tokenInstance == null) ||
-				(i > 0 && jsonText.charAt(i - 1) == '\\')) {
-
-				continue;
-			}
-
-			if (tokenInstance instanceof ArrayStartTokenInstance) {
-				elements.add(new JSONArray());
-			}
-			else if (tokenInstance instanceof ObjectStartTokenInstance) {
-				elements.add(new JSONObject());
-			}
-
-			tokenInstances.add(tokenInstance);
-		}
-
-		if (tokenInstances.isEmpty() ||
-			!(tokenInstances.peek() instanceof ArrayStartTokenInstance ||
-				tokenInstances.peek() instanceof ObjectStartTokenInstance)) {
-
-			throw new JSONParseMalformedObjectException();
-		}
-
-		System.out.println("elements = " + elements);
-
-		return _assemble(tokenInstances, elements, jsonText);
+	private static Number getNumberValue(String num) {
+		return Double.parseDouble(num);
 	}
 
 	private static class ElementTokenInstance {
 
 		ElementTokenInstance(
 			ElementToken elementToken, int index) {
+
 			this.elementToken = elementToken;
 			this.index = index;
 		}
@@ -540,63 +546,6 @@ public class JSONFactory {
 
 		ElementToken elementToken;
 		int index;
-	}
-
-	private static class ArrayStartTokenInstance extends ElementTokenInstance {
-
-		ArrayStartTokenInstance(int index) {
-			super(ElementToken.ARR_START, index);
-		}
-
-	}
-
-	private static class ArrayEndTokenInstance extends ElementTokenInstance {
-
-		ArrayEndTokenInstance(int index) {
-			super(ElementToken.ARR_END, index);
-		}
-
-	}
-
-	private static class ObjectStartTokenInstance extends ElementTokenInstance {
-
-		ObjectStartTokenInstance(int index) {
-			super(ElementToken.OBJ_START, index);
-		}
-	}
-
-	private static class ObjectEndTokenInstance extends ElementTokenInstance {
-
-		ObjectEndTokenInstance(int index) {
-			super(ElementToken.OBJ_END, index);
-		}
-
-	}
-
-	private static class NameSeperatorTokenInstance
-		extends ElementTokenInstance {
-
-		NameSeperatorTokenInstance(int index) {
-			super(ElementToken.NAME_SEP, index);
-		}
-
-	}
-
-	private static class ValueSeperatorTokenInstance
-		extends ElementTokenInstance {
-
-		ValueSeperatorTokenInstance(int index) {
-			super(ElementToken.VALUE_SEP, index);
-		}
-
-	}
-
-	private static class QuoteTokenInstance extends ElementTokenInstance {
-
-		QuoteTokenInstance(int index) {
-			super(ElementToken.QUOTE, index);
-		}
-
 	}
 
 	private enum ElementToken {
@@ -640,19 +589,19 @@ public class JSONFactory {
 		public static ElementTokenInstance getTokenInstance(char c, int i) {
 			switch (c) {
 				case '[':
-					return new ArrayStartTokenInstance(i);
+					return new ElementTokenInstance(ARR_START, i);
 				case ']':
-					return new ArrayEndTokenInstance(i);
+					return new ElementTokenInstance(ARR_END, i);
 				case '{':
-					return new ObjectStartTokenInstance(i);
+					return new ElementTokenInstance(OBJ_START, i);
 				case '}':
-					return new ObjectEndTokenInstance(i);
+					return new ElementTokenInstance(OBJ_END, i);
 				case ':':
-					return new NameSeperatorTokenInstance(i);
+					return new ElementTokenInstance(NAME_SEP, i);
 				case ',':
-					return new ValueSeperatorTokenInstance(i);
+					return new ElementTokenInstance(VALUE_SEP, i);
 				case '"':
-					return new QuoteTokenInstance(i);
+					return new ElementTokenInstance(QUOTE, i);
 				default:
 					return null;
 			}

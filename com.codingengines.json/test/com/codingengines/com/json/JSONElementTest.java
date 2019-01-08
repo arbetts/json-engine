@@ -19,7 +19,7 @@ public class JSONElementTest {
 
 		jsonObject.put(
 			"hello",
-			"\uD834\uDD1E \u0000 through \u001f \n\t\b\r펍 ©world");
+			" \" \\\" \u0000 through \u001f \n\t\b\r world \\");
 
 		JSONArray jsonArray = JSONFactory.createJSONArray();
 
