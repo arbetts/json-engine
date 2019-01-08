@@ -4,6 +4,8 @@ import com.codingengines.json.exception.CircularDependencyException;
 import com.codingengines.json.function.KeyConverter;
 import com.codingengines.json.io.JSONInput;
 import com.codingengines.json.io.JSONOutput;
+import com.codingengines.json.io.JSONReadable;
+import com.codingengines.json.io.JSONWritable;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -75,6 +77,19 @@ public abstract class JSONElement<K> implements
 		return defaultValue;
 	}
 
+	@Override
+	public JSONReadable get(K key, JSONReadable jsonReadable) {
+		JSONValue<?> jsonValue = getChild(key);
+
+		if (jsonValue instanceof JSONElement) {
+			JSONElement<?> jsonElement = (JSONElement<?>)jsonValue.get();
+
+			jsonReadable.read(jsonElement);
+		}
+
+		return jsonReadable;
+	}
+
 	public Iterator<JSONPair<K, ?>> iterator() {
 		ListIterator<JSONPair<K, ?>> pairListIterator =
 			children.listIterator();
@@ -123,6 +138,15 @@ public abstract class JSONElement<K> implements
 		value.setParent(this);
 
 		putChild(key, value);
+	}
+
+	@Override
+	public void put(K key, JSONWritable jsonWritable) {
+		JSONObject jsonObject = new JSONObject();
+
+		jsonWritable.write(jsonObject);
+
+		put(key, jsonObject);
 	}
 
 	public int size() {
